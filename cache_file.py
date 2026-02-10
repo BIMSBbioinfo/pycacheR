@@ -11,6 +11,7 @@ import os
 import pickle
 import random
 import re
+import sys
 import time
 import types
 import inspect
@@ -244,7 +245,17 @@ def fast_file_hash(
         return prev["hash"]
 
     h = probabilistic_file_hash(path, block_size=block_size, n_blocks=n_blocks, algo=algo)
-    _file_state_cache[str(path)] = {"fp": fp, "hash": h}
+    _file_state_cache[str(path)] = {"fp": fp, "hash": h, "atime": time.time()}
+
+    # Bounded eviction: remove oldest entries when cache exceeds limit
+    if len(_file_state_cache) > _FILE_STATE_CACHE_LIMIT:
+        entries = sorted(_file_state_cache.items(), key=lambda kv: kv[1].get("atime", 0))
+        # Keep only the most recent half
+        keep = _FILE_STATE_CACHE_LIMIT // 2
+        to_remove = [k for k, _ in entries[:-keep]]
+        for k in to_remove:
+            _file_state_cache.pop(k, None)
+
     return h
 
 
@@ -334,6 +345,7 @@ def cache_default_dir() -> Path:
 def cache_prune(cache_dir: os.PathLike | str, days_old: int = 30) -> None:
     """
     Delete cache files older than days_old, based on mtime.
+    Also cleans up .lock, .tmp.*, and .computing files unconditionally.
     """
     cache_dir = Path(cache_dir)
     if not cache_dir.exists():
@@ -349,8 +361,16 @@ def cache_prune(cache_dir: os.PathLike | str, days_old: int = 30) -> None:
         if p.stat().st_mtime < cutoff_sec:
             to_delete.append(p)
 
+    # Always clean up stale auxiliary files
+    for p in cache_dir.glob("*.lock"):
+        to_delete.append(p)
+    for p in cache_dir.glob("*.tmp.*"):
+        to_delete.append(p)
+    for p in cache_dir.glob("*.computing"):
+        to_delete.append(p)
+
     if to_delete:
-        logger.info("Deleting %d old cache files...", len(to_delete))
+        logger.info("Deleting %d old/stale cache files...", len(to_delete))
         for p in to_delete:
             try:
                 p.unlink()
@@ -361,6 +381,65 @@ def cache_prune(cache_dir: os.PathLike | str, days_old: int = 30) -> None:
 # ============================================================================
 # cacheInfo + cacheList equivalents (optional)
 # ============================================================================
+
+_FILE_STATE_CACHE_LIMIT = 500
+
+
+def cache_stats(cache_dir: os.PathLike | str) -> Dict[str, Any]:
+    """
+    Return aggregate statistics for a cache directory.
+    Excludes graph.rds from counts.
+    """
+    cache_dir = Path(cache_dir)
+    if not cache_dir.exists():
+        raise FileNotFoundError(f"Cache directory not found: {cache_dir}")
+
+    files = [
+        p for p in cache_dir.iterdir()
+        if p.is_file()
+        and re.search(r"\.(rds|qs)$", p.name)
+        and not p.name.startswith("graph.")
+    ]
+
+    if not files:
+        return {
+            "n_entries": 0,
+            "total_size_mb": 0.0,
+            "oldest": None,
+            "newest": None,
+        }
+
+    sizes = [p.stat().st_size for p in files]
+    mtimes = [p.stat().st_mtime for p in files]
+    return {
+        "n_entries": len(files),
+        "total_size_mb": sum(sizes) / (1024 * 1024),
+        "oldest": min(mtimes),
+        "newest": max(mtimes),
+    }
+
+
+def load_config(
+    path: os.PathLike | str,
+    existing: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Load cachepy configuration from a YAML file.
+    If *existing* is provided, keys already in existing are NOT overridden.
+    """
+    import yaml
+
+    path = Path(path)
+    with path.open() as f:
+        data = yaml.safe_load(f) or {}
+
+    if existing is not None:
+        merged = dict(data)
+        merged.update(existing)  # existing wins
+        return merged
+
+    return data
+
 
 def _norm_path(path: os.PathLike | str) -> str:
     return str(Path(path).resolve())
@@ -699,6 +778,55 @@ def _find_path_specs(func: Callable) -> Dict[str, List[str]]:
     }
 
 
+def _detect_import_names(func: Callable) -> Set[str]:
+    """Parse function AST to find import statements; return set of top-level module names."""
+    try:
+        src = inspect.getsource(func)
+    except OSError:
+        return set()
+    src = textwrap.dedent(src)
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+
+    names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                names.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module.split(".")[0])
+    return names
+
+
+def _get_package_versions(import_names: Set[str], func: Callable) -> Dict[str, str]:
+    """Look up versions for AST-detected imports + module-type globals referenced by func."""
+    all_names = set(import_names)
+
+    # Check referenced globals (co_names) for module types
+    code = getattr(func, "__code__", None)
+    globs = getattr(func, "__globals__", {})
+    if code:
+        for name in code.co_names:
+            val = globs.get(name)
+            if isinstance(val, types.ModuleType):
+                mod_name = getattr(val, "__name__", name).split(".")[0]
+                all_names.add(mod_name)
+
+    pkgs: Dict[str, str] = {}
+    for name in sorted(all_names):
+        mod = sys.modules.get(name)
+        if mod is None:
+            continue
+        ver = getattr(mod, "__version__", None)
+        if ver is not None:
+            pkgs[name] = str(ver)
+
+    return pkgs
+
+
 
 # ============================================================================
 # cacheFile -> cache_file decorator
@@ -712,6 +840,11 @@ def cache_file(
     file_pattern: Optional[str] = None,
     env_vars: Optional[List[str]] = None,
     algo: str = "xxhash64",
+    version: Optional[str] = None,
+    depends_on_files: Optional[List[str]] = None,
+    depends_on_vars: Optional[Dict[str, Any]] = None,
+    verbose: bool = False,
+    hash_file_paths: bool = True,
 ) -> Callable[[Callable], Callable]:
     """
     Disk-backed caching decorator (Python analogue of R's cacheFile).
@@ -749,13 +882,15 @@ def cache_file(
         ps = path_specs(f)
         static_dirs_lit: List[str] = ps.get("literals", [])
         static_dirs_sym: List[str] = ps.get("symbols", [])
+        # Detect import names at decoration time (AST is static)
+        _import_names = _detect_import_names(f)
 
         def _get_path_hash(path: os.PathLike | str) -> str:
-            p = Path(path)
+            p = Path(path).resolve()
             if p.is_dir():
                 # list files recursively, optional regex filter
                 files = []
-                for sub in p.rglob("*"):
+                for sub in sorted(p.rglob("*")):
                     if sub.is_file():
                         if file_pattern is not None:
                             if not re.search(file_pattern, sub.name):
@@ -763,11 +898,14 @@ def cache_file(
                         files.append(sub)
                 if not files:
                     return "empty_dir"
-                # hash mtimes of all files
-                mtimes = [sub.stat().st_mtime for sub in files]
-                return _digest_obj(mtimes, algo=algo)
+                # hash (relative name, content hash) for structure + content
+                file_entries = []
+                for sub in files:
+                    rel = str(sub.relative_to(p))
+                    file_entries.append((rel, fast_file_hash(sub, algo=algo)))
+                return _digest_obj(file_entries, algo=algo)
             elif p.is_file():
-                return _digest_obj(p.stat().st_mtime, algo=algo)
+                return fast_file_hash(p, algo=algo)
             else:
                 return ""
 
@@ -815,7 +953,7 @@ def cache_file(
                 return obj["dat"]
             return obj
 
-        def wrapper(*args, _load: bool = True, **kwargs):
+        def wrapper(*args, _load: bool = True, _force: bool = False, _skip_save: bool = False, **kwargs):
             invoke_env_globals = f.__globals__
 
             # -------- function name for filename label --------
@@ -826,8 +964,10 @@ def cache_file(
             bound.apply_defaults()
 
             args_for_hash: Dict[str, Any] = dict(bound.arguments)
-            # remove _load from hashing if user passes it
+            # remove control params from hashing
             args_for_hash.pop("_load", None)
+            args_for_hash.pop("_force", None)
+            args_for_hash.pop("_skip_save", None)
 
             if ignore_args:
                 for nm in ignore_args:
@@ -835,6 +975,25 @@ def cache_file(
 
             # order by argument name for stability
             args_for_hash = dict(sorted(args_for_hash.items(), key=lambda kv: kv[0]))
+
+            # Sort **kwargs dict values for order-independent hashing
+            for param_name, param in sig.parameters.items():
+                if param.kind == inspect.Parameter.VAR_KEYWORD and param_name in args_for_hash:
+                    val = args_for_hash[param_name]
+                    if isinstance(val, dict):
+                        args_for_hash[param_name] = dict(sorted(val.items(), key=lambda kv: kv[0]))
+
+            # -------- resolve symlinks and normalize file_args --------
+            if file_args:
+                for nm in file_args:
+                    if nm in args_for_hash:
+                        val = args_for_hash[nm]
+                        if isinstance(val, (str, Path)):
+                            resolved = str(Path(val).resolve())
+                            if not hash_file_paths and Path(resolved).exists():
+                                args_for_hash[nm] = _get_path_hash(resolved)
+                            else:
+                                args_for_hash[nm] = resolved
 
             # -------- dynamic path scanning over arguments --------
             def _collect_paths(val: Any) -> List[Path]:
@@ -888,17 +1047,29 @@ def cache_file(
             # -------- recursive closure hash --------
             deep_hash = get_recursive_closure_hash(f, algo=algo)
 
+            # -------- package version detection --------
+            pkg_versions = _get_package_versions(_import_names, f)
+
             # -------- build master hash --------
             dir_states: Dict[str, str] = {}
             dir_states.update(dir_hashes_args)
             dir_states.update(static_hashes_lit)
             dir_states.update(static_hashes_sym)
 
+            # -------- depends_on_files hashing --------
+            dep_file_hashes = None
+            if depends_on_files:
+                dep_file_hashes = {p: _get_path_hash(p) for p in sorted(depends_on_files)}
+
             hashlist = {
                 "call": args_for_hash,
                 "closure": deep_hash,
                 "dir_states": dict(sorted(dir_states.items(), key=lambda kv: kv[0])),
                 "envs": current_envs,
+                "version": version,
+                "depends_on_files": dep_file_hashes,
+                "depends_on_vars": depends_on_vars,
+                "pkgs": pkg_versions,
             }
 
             args_hash = _digest_obj(hashlist, algo=algo)
@@ -911,43 +1082,95 @@ def cache_file(
             _cache_tree_call_stack.append(node_id)
             try:
                 # 1. optimistic load
-                if _load and outfile.exists():
+                if _load and not _force and outfile.exists():
                     try:
-                        return _safe_load(outfile)
+                        result = _safe_load(outfile)
+                        if verbose:
+                            logger.info("[%s] cache hit", fname)
+                        return result
                     except Exception:
                         # partial/corrupt -> ignore and recompute
                         pass
 
-                # 2. compute
-                dat = f(*args, **kwargs)
+                # verbose: report why we're computing
+                if verbose:
+                    if _force:
+                        logger.info("[%s] forced re-execution", fname)
+                    else:
+                        # Check if any cache files exist for this function
+                        existing = list(cache_dir_path.glob(f"{fname}.*.{backend}"))
+                        if not existing:
+                            logger.info("[%s] first execution", fname)
+                        else:
+                            logger.info("[%s] cache miss (argument or dependency changed)", fname)
 
-                save_data = {"dat": dat, "meta": hashlist}
+                # 2. record pre-execution file hashes for modification warning
+                pre_file_hashes: Dict[str, str] = {}
+                if file_args and dir_hashes_args:
+                    pre_file_hashes = dict(dir_hashes_args)
 
-                # 3. try file locking if available
-                lock = None
-                lock_path = outfile.with_suffix(outfile.suffix + ".lock")
+                # 3. compute with sentinel
+                sentinel_path = outfile.with_suffix(outfile.suffix + ".computing")
                 try:
-                    from filelock import FileLock  # type: ignore
+                    sentinel_path.touch()
+                except OSError:
+                    pass
 
-                    lock = FileLock(str(lock_path))
-                    lock.acquire(timeout=5)
+                try:
+                    dat = f(*args, **kwargs)
                 except Exception:
-                    lock = None
-
-                try:
-                    # double-check: maybe someone else wrote it while we computed
-                    if _load and outfile.exists():
-                        try:
-                            return _safe_load(outfile)
-                        except Exception:
-                            pass
-                    _atomic_save(save_data, outfile)
+                    # Remove graph node on error
+                    _cache_tree_graph.pop(node_id, None)
+                    raise
                 finally:
-                    if lock is not None:
-                        try:
-                            lock.release()
-                        except Exception:
-                            pass
+                    # Always clean up sentinel
+                    try:
+                        sentinel_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+                # 4. check for file modification during execution
+                if pre_file_hashes:
+                    import warnings as _warnings
+                    _file_state_cache.clear()  # force re-hash
+                    for pstr, old_h in pre_file_hashes.items():
+                        p = Path(pstr)
+                        if p.exists():
+                            new_h = _get_path_hash(p)
+                            if new_h != old_h:
+                                _warnings.warn(
+                                    f"File modified during execution: {pstr}",
+                                    stacklevel=2,
+                                )
+
+                if not _skip_save:
+                    save_data = {"dat": dat, "meta": hashlist}
+
+                    # 3. try file locking if available
+                    lock = None
+                    lock_path = outfile.with_suffix(outfile.suffix + ".lock")
+                    try:
+                        from filelock import FileLock  # type: ignore
+
+                        lock = FileLock(str(lock_path))
+                        lock.acquire(timeout=5)
+                    except Exception:
+                        lock = None
+
+                    try:
+                        # double-check: maybe someone else wrote it while we computed
+                        if _load and not _force and outfile.exists():
+                            try:
+                                return _safe_load(outfile)
+                            except Exception:
+                                pass
+                        _atomic_save(save_data, outfile)
+                    finally:
+                        if lock is not None:
+                            try:
+                                lock.release()
+                            except Exception:
+                                pass
 
                 return dat
             finally:

@@ -353,7 +353,6 @@ def test_deseq2_like_execution(tmp_path):
 # Group 7: Content vs mtime (from test-files.R)
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: content-only hashing (touch no invalidation)")
 def test_touch_no_invalidation(tmp_path):
     """R: Touching a file (mtime change) does NOT invalidate cache if content identical"""
     cache_dir = tmp_path / "cache"
@@ -444,7 +443,6 @@ def test_hash_determinism_across_clears(tmp_path):
 # Group 10: Directory Hashing
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: directory structure change detection on rename")
 def test_dir_rename_detection(tmp_path):
     """R: Directory hashing detects file renaming (structure changes)"""
     cache_dir = tmp_path / "cache"
@@ -538,7 +536,6 @@ def test_vector_dir_paths(tmp_path):
 # Group 12: Symlinks
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: symlink resolution for caching")
 def test_symlinks_resolved(tmp_path):
     """R: symlinks are resolved to their target files for caching"""
     if sys.platform == "win32":
@@ -573,7 +570,6 @@ def test_symlinks_resolved(tmp_path):
 # Group 13: hash_file_paths Control
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: hash_file_paths parameter")
 def test_hash_file_paths_control(tmp_path):
     """R: hash_file_paths controls location sensitivity"""
     cache_dir = tmp_path / "cache"
@@ -611,7 +607,6 @@ def test_hash_file_paths_control(tmp_path):
 # Group 14: File Modification Warning
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: file modification during execution warning")
 def test_file_modified_during_execution_warning(tmp_path):
     """R: cache saves WITH WARNING if argument file is modified during execution"""
     cache_dir = tmp_path / "cache"

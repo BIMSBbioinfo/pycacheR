@@ -55,7 +55,6 @@ def mock_pkg_cleanup():
 # Tests
 # =========================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: package metadata in cache files")
 def test_stores_pkgs_metadata_for_imported_modules(tmp_path, mock_pkg_cleanup):
     """R: cacheFile stores package version metadata alongside cached data"""
     cache_dir = tmp_path / "cache"
@@ -77,7 +76,6 @@ def test_stores_pkgs_metadata_for_imported_modules(tmp_path, mock_pkg_cleanup):
     assert meta["pkgs"]["digest_lib"] == "0.6.29"
 
 
-@pytest.mark.xfail(reason="not yet implemented: hash changes on package version change")
 def test_hash_changes_when_pkg_version_changes(tmp_path, mock_pkg_cleanup):
     """R: cacheFile hash changes when package version changes"""
     cache_dir = tmp_path / "cache"
@@ -119,7 +117,6 @@ def test_pkgs_metadata_is_empty_for_builtins(tmp_path):
     assert not pkgs
 
 
-@pytest.mark.xfail(reason="not yet implemented: multiple package tracking")
 def test_captures_multiple_packages(tmp_path, mock_pkg_cleanup):
     """R: cacheFile captures versions for all imported packages"""
     cache_dir = tmp_path / "cache"
@@ -145,7 +142,6 @@ def test_captures_multiple_packages(tmp_path, mock_pkg_cleanup):
     assert "pkgB" in meta["pkgs"]
 
 
-@pytest.mark.xfail(reason="not yet implemented: global import detection")
 def test_detects_global_imports(tmp_path, mock_pkg_cleanup):
     """R: cacheFile detects globally imported modules"""
     cache_dir = tmp_path / "cache"

@@ -284,7 +284,6 @@ def test_value_change_invalidates_cache(tmp_path):
 # Section G: Argument Ordering & Kwargs
 # ============================================================================
 
-@pytest.mark.xfail(reason="kwargs dict order not normalized in hash")
 def test_kwargs_order_independent(tmp_path):
     """R: Dots (...) are order-independent (sorted by name)"""
     cache_dir = tmp_path / "cache"
@@ -603,7 +602,6 @@ def test_reversed_named_same_cache(tmp_path):
 # Section O: Graph Node Cleanup on Error (Issue #8)
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: graph node cleanup on error")
 def test_graph_node_removed_on_error_disk(tmp_path):
     """R: removes graph node from disk when function errors"""
     cache_dir = tmp_path / "cache"
@@ -619,7 +617,6 @@ def test_graph_node_removed_on_error_disk(tmp_path):
     assert len(nodes) == 0
 
 
-@pytest.mark.xfail(reason="not yet implemented: graph node cleanup on error")
 def test_graph_node_removed_on_error_memory(tmp_path):
     """R: removes graph node from memory when function errors"""
     cache_dir = tmp_path / "cache"
@@ -651,7 +648,6 @@ def test_graph_node_preserved_on_success(tmp_path):
 # Section P: Lock/Sentinel Cleanup (Issue #9)
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: lock/tmp cleanup in prune")
 def test_prune_removes_lock_and_tmp(tmp_path):
     """R: removes .lock and .tmp files"""
     cache_dir = tmp_path / "cache"
@@ -729,17 +725,22 @@ def test_rehash_after_clear(tmp_path):
 # Section R: Bounded File State Cache
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: bounded file state cache eviction")
 def test_file_state_cache_eviction(tmp_path):
     """R: evicts entries when limit is exceeded"""
-    # Create 10 files, hash them all with a limit of 5
-    for i in range(10):
-        f = tmp_path / f"file_{i}.txt"
-        f.write_text(f"content_{i}")
-        fast_file_hash(f)
+    import sys
+    cf_mod = sys.modules["cachepy.cache_file"]
+    old_limit = cf_mod._FILE_STATE_CACHE_LIMIT
+    cf_mod._FILE_STATE_CACHE_LIMIT = 5
+    try:
+        for i in range(10):
+            f = tmp_path / f"file_{i}.txt"
+            f.write_text(f"content_{i}")
+            fast_file_hash(f)
 
-    # Should have been evicted to <= 6 entries
-    assert len(_file_state_cache) <= 6
+        # Should have been evicted to <= 6 entries
+        assert len(_file_state_cache) <= 6
+    finally:
+        cf_mod._FILE_STATE_CACHE_LIMIT = old_limit
 
 
 # ============================================================================
@@ -778,7 +779,6 @@ def test_graph_save_load_roundtrip(tmp_path):
 # Section T: Cache Statistics
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: cache_stats()")
 def test_cache_stats_aggregate(tmp_path):
     """R: cache_stats returns correct aggregate statistics"""
     cache_dir = tmp_path / "cache"
@@ -799,7 +799,6 @@ def test_cache_stats_aggregate(tmp_path):
     assert stats["newest"] is not None
 
 
-@pytest.mark.xfail(reason="not yet implemented: cache_stats()")
 def test_cache_stats_excludes_graph(tmp_path):
     """R: cache_stats excludes graph.rds"""
     cache_dir = tmp_path / "cache"
@@ -814,7 +813,6 @@ def test_cache_stats_excludes_graph(tmp_path):
     assert stats["n_entries"] == 0
 
 
-@pytest.mark.xfail(reason="not yet implemented: cache_stats()")
 def test_cache_stats_nonexistent_dir(tmp_path):
     """R: cache_stats errors on non-existent directory"""
     from cachepy.cache_file import cache_stats
@@ -827,7 +825,6 @@ def test_cache_stats_nonexistent_dir(tmp_path):
 # Section U: Verbose Mode
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: verbose mode")
 def test_verbose_first_execution(tmp_path, caplog):
     """R: verbose mode reports 'first execution' on first call"""
     cache_dir = tmp_path / "cache"
@@ -842,7 +839,6 @@ def test_verbose_first_execution(tmp_path, caplog):
     assert "first execution" in caplog.text.lower()
 
 
-@pytest.mark.xfail(reason="not yet implemented: verbose mode")
 def test_verbose_reports_changed_component(tmp_path, caplog):
     """R: verbose mode reports which component changed on miss"""
     cache_dir = tmp_path / "cache"
@@ -876,7 +872,6 @@ def test_verbose_silent_when_disabled(tmp_path, caplog):
 # Section V: Configuration File Loading
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: YAML config loading")
 def test_config_loads_from_yaml(tmp_path):
     """R: .load_cacheR_config loads settings from YAML file"""
     config_path = tmp_path / ".cachepy.yml"
@@ -897,7 +892,6 @@ def test_config_loads_from_yaml(tmp_path):
     assert "HOME" in config["env_vars"]
 
 
-@pytest.mark.xfail(reason="not yet implemented: YAML config loading")
 def test_config_does_not_override_existing(tmp_path):
     """R: .load_cacheR_config does not override existing options"""
     config_path = tmp_path / ".cachepy.yml"
@@ -982,7 +976,6 @@ def test_warns_on_corrupt_cache_file(tmp_path):
 # Section X: Conditional Caching (.force, .skip_save)
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: .force parameter")
 def test_force_reexecutes(tmp_path):
     """R: .force = TRUE re-executes even when cache exists"""
     cache_dir = tmp_path / "cache"
@@ -1007,7 +1000,6 @@ def test_force_reexecutes(tmp_path):
     assert int(counter_file.read_text()) == 2
 
 
-@pytest.mark.xfail(reason="not yet implemented: .skip_save parameter")
 def test_skip_save_no_write(tmp_path):
     """R: .skip_save = TRUE does not write cache file on miss"""
     cache_dir = tmp_path / "cache"
@@ -1022,7 +1014,6 @@ def test_skip_save_no_write(tmp_path):
     assert count_cache_entries(cache_dir) == 0
 
 
-@pytest.mark.xfail(reason="not yet implemented: .force + .skip_save")
 def test_force_and_skip_save_combined(tmp_path):
     """R: .force + .skip_save combined: re-executes and doesn't save"""
     cache_dir = tmp_path / "cache"
@@ -1048,7 +1039,6 @@ def test_force_and_skip_save_combined(tmp_path):
 # Section Y: Versioning
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: version parameter")
 def test_version_same_hits_cache(tmp_path):
     """R: version parameter: same version hits cache"""
     cache_dir = tmp_path / "cache"
@@ -1068,7 +1058,6 @@ def test_version_same_hits_cache(tmp_path):
     assert int(counter_file.read_text()) == 1  # Cache hit
 
 
-@pytest.mark.xfail(reason="not yet implemented: version parameter")
 def test_version_different_misses(tmp_path):
     """R: version parameter: different version causes cache miss"""
     cache_dir = tmp_path / "cache"
@@ -1115,7 +1104,6 @@ def test_version_none_default(tmp_path):
 # Section Z: Dependency Declaration
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: depends_on_files parameter")
 def test_depends_on_files(tmp_path):
     """R: depends_on_files: file change causes cache miss"""
     cache_dir = tmp_path / "cache"
@@ -1144,7 +1132,6 @@ def test_depends_on_files(tmp_path):
     assert int(counter_file.read_text()) == 2  # Miss
 
 
-@pytest.mark.xfail(reason="not yet implemented: depends_on_vars parameter")
 def test_depends_on_vars(tmp_path):
     """R: depends_on_vars: different values cause cache miss"""
     cache_dir = tmp_path / "cache"
@@ -1194,7 +1181,6 @@ def test_depends_on_null_defaults(tmp_path):
 # Section AA: Sentinel-based Parallel Prevention
 # ============================================================================
 
-@pytest.mark.xfail(reason="not yet implemented: sentinel files")
 def test_sentinel_lifecycle(tmp_path):
     """R: sentinel file is created during execution and cleaned up after"""
     cache_dir = tmp_path / "cache"
@@ -1263,7 +1249,6 @@ def test_stale_sentinel_ignored(tmp_path):
     assert int(counter_file.read_text()) >= 1
 
 
-@pytest.mark.xfail(reason="not yet implemented: sentinel cleanup in prune")
 def test_prune_cleans_sentinels(tmp_path):
     """R: cachePrune cleans up .computing sentinel files"""
     cache_dir = tmp_path / "cache"
