@@ -10,3 +10,4 @@ build/
 demo_cache/
 data/
 *.html
+site/

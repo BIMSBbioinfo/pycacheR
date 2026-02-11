@@ -18,7 +18,7 @@ from cachepy.cache_file import (
     fast_file_hash,
     probabilistic_file_hash,
 )
-from cachepy.tests.conftest import count_cache_entries
+from conftest import count_cache_entries
 
 
 # --- HELPER FUNCTIONS DEFINED AT MODULE LEVEL ---

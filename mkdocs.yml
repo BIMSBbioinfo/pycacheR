@@ -1,0 +1,61 @@
+site_name: cachepy
+site_url: https://BIMSBbioinfo.github.io/cachepy/
+site_description: Disk-backed memoization decorator with automatic dependency tracking
+repo_url: https://github.com/BIMSBbioinfo/cachepy
+repo_name: BIMSBbioinfo/cachepy
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Features: features.md
+  - API Reference: api.md
+  - Tutorials:
+      - Feature Showcase: tutorials/showcase.md
+      - scRNA-seq Pipeline: tutorials/scrnaseq.md
+      - PyTorch Caching: tutorials/pytorch.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+            heading_level: 3
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true

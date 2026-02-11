@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from cachepy import cache_file
-from cachepy.tests.conftest import count_cache_entries
+from conftest import count_cache_entries
 
 
 # Module-level function for AST analysis
