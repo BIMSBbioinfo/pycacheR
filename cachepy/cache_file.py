@@ -150,6 +150,13 @@ def _cache_tree_register_node(
 
     _cache_tree_graph[node_id] = node
 
+    # persist to disk (best-effort)
+    if outfile is not None:
+        try:
+            _append_graph_to_disk(Path(outfile).parent, node_id)
+        except Exception:
+            pass
+
 
 # ============================================================================
 # Public helpers (R: cacheTree_nodes, cacheTree_for_file, cacheTree_reset, ...)
@@ -199,6 +206,61 @@ def cache_tree_load(path: os.PathLike | str) -> None:
     _cache_tree_call_stack.clear()
 
 
+def cache_tree_sync(cache_dir: os.PathLike | str) -> None:
+    """Load graph from disk and merge into in-memory graph (new nodes only)."""
+    graph_path = Path(cache_dir) / "graph.pkl"
+    if not graph_path.exists():
+        return
+    try:
+        with graph_path.open("rb") as f:
+            disk_graph = pickle.load(f)
+        for k, v in disk_graph.items():
+            if k not in _cache_tree_graph:
+                _cache_tree_graph[k] = v
+    except Exception:
+        pass
+
+
+def _append_graph_to_disk(cache_dir: Path, node_id: str) -> None:
+    """Append a node to the persistent graph.pkl (with optional file locking)."""
+    graph_path = cache_dir / "graph.pkl"
+    lock = None
+    try:
+        from filelock import FileLock  # type: ignore
+        lock_path = graph_path.with_suffix(".pkl.lock")
+        lock = FileLock(str(lock_path), timeout=5)
+        lock.acquire()
+    except Exception:
+        lock = None
+
+    try:
+        # load existing
+        existing: Dict[str, Any] = {}
+        if graph_path.exists():
+            try:
+                with graph_path.open("rb") as f:
+                    existing = pickle.load(f)
+            except Exception:
+                existing = {}
+
+        # merge new node
+        node = _cache_tree_graph.get(node_id)
+        if node is not None:
+            existing[node_id] = node
+
+        # save back
+        with graph_path.open("wb") as f:
+            pickle.dump(existing, f)
+    except Exception as e:
+        logger.warning("cache_file: failed to persist graph node: %s", e)
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+
 # ============================================================================
 # File fingerprinting + probabilistic hashing + metadata cache
 # (R: probabilistic_file_hash, fast_file_hash)
@@ -227,17 +289,20 @@ def _digest_obj(obj: Any, algo: str = "xxhash64") -> str:
     return _digest_bytes(data, algo=algo)
 
 
+_FULL_HASH_LIMIT = 5 * 1024 * 1024  # 5 MB — files at or below this are hashed in full
+
+
 def probabilistic_file_hash(
     path: os.PathLike | str,
     block_size: int = 64 * 1024,
     n_blocks: int = 5,
     algo: str = "xxhash64",
+    full_hash_limit: int = _FULL_HASH_LIMIT,
 ) -> str:
     """
     Probabilistic file hash:
-      - always read first block
-      - optionally sample n_blocks random blocks
-      - optionally read last block
+      - files <= full_hash_limit: hash entire file (exact)
+      - larger files: sample first block, n_blocks random blocks, last block
     Stable w.r.t file path + size.
     """
     path = Path(path)
@@ -245,28 +310,33 @@ def probabilistic_file_hash(
         return ""
 
     size = path.stat().st_size
+
+    # small files: hash entirely for exact results
+    if size <= full_hash_limit:
+        with path.open("rb") as f:
+            data = f.read()
+        return _digest_bytes(data, algo=algo)
+
     blocks: List[bytes] = []
 
     with path.open("rb") as f:
         # first block
         blocks.append(f.read(block_size))
 
-        if size > block_size:
-            max_offset = max(size - block_size, 1)
+        max_offset = max(size - block_size, 1)
 
-            # deterministic sampling based on path + size
-            seed_val = f"{path}:{size}".encode("utf-8")
-            random.seed(_digest_bytes(seed_val, algo="sha256"))
+        # deterministic sampling based on path + size
+        seed_val = f"{path}:{size}".encode("utf-8")
+        random.seed(_digest_bytes(seed_val, algo="sha256"))
 
-            for _ in range(n_blocks):
-                offset = random.randint(0, max_offset)
-                f.seek(offset)
-                blocks.append(f.read(block_size))
+        for _ in range(n_blocks):
+            offset = random.randint(0, max_offset)
+            f.seek(offset)
+            blocks.append(f.read(block_size))
 
         # last block
-        if size > block_size:
-            f.seek(max(size - block_size, 0))
-            blocks.append(f.read(block_size))
+        f.seek(max(size - block_size, 0))
+        blocks.append(f.read(block_size))
 
     data = b"".join(blocks)
     return _digest_bytes(data, algo=algo)
@@ -652,6 +722,21 @@ def cache_default_dir() -> Path:
     return path
 
 
+def cache_file_state_info() -> Dict[str, Any]:
+    """Return status of the in-memory file hash cache."""
+    return {
+        "n_entries": len(_file_state_cache),
+        "paths": list(_file_state_cache.keys()),
+    }
+
+
+def cache_file_state_clear() -> int:
+    """Clear the in-memory file hash cache. Returns the number of entries removed."""
+    n = len(_file_state_cache)
+    _file_state_cache.clear()
+    return n
+
+
 def cache_prune(cache_dir: os.PathLike | str, days_old: int = 30) -> None:
     """
     Delete cache files older than days_old, based on mtime.
@@ -718,11 +803,23 @@ def cache_stats(cache_dir: os.PathLike | str) -> Dict[str, Any]:
 
     sizes = [p.stat().st_size for p in files]
     mtimes = [p.stat().st_mtime for p in files]
+
+    # per-function breakdown: extract fname from filename pattern "fname.hash.ext"
+    by_func: Dict[str, Dict[str, Any]] = {}
+    for p, sz in zip(files, sizes):
+        parts = p.stem.rsplit(".", 1)  # "fname.hash" -> ["fname", "hash"]
+        fn = parts[0] if len(parts) == 2 else p.stem
+        if fn not in by_func:
+            by_func[fn] = {"fname": fn, "n_files": 0, "total_size_mb": 0.0}
+        by_func[fn]["n_files"] += 1
+        by_func[fn]["total_size_mb"] += sz / (1024 * 1024)
+
     return {
         "n_entries": len(files),
         "total_size_mb": sum(sizes) / (1024 * 1024),
         "oldest": min(mtimes),
         "newest": max(mtimes),
+        "by_function": sorted(by_func.values(), key=lambda d: d["fname"]),
     }
 
 
@@ -1348,6 +1445,17 @@ def cache_file(
                 return obj["dat"]
             return obj
 
+        def _safe_load_full(path: Path) -> Optional[Dict[str, Any]]:
+            """Load a cache file and return the raw dict (with 'dat' and 'meta')."""
+            try:
+                with path.open("rb") as f2:
+                    obj = pickle.load(f2)
+                if isinstance(obj, dict) and "meta" in obj:
+                    return obj
+            except Exception:
+                pass
+            return None
+
         def wrapper(*args, _load: bool = True, _force: bool = False, _skip_save: bool = False, **kwargs):
             invoke_env_globals = f.__globals__
 
@@ -1392,9 +1500,17 @@ def cache_file(
 
             # -------- dynamic path scanning over arguments --------
             def _collect_paths(val: Any) -> List[Path]:
+                """Recursively extract file/directory paths from any value."""
                 out: List[Path] = []
-                if isinstance(val, (str, Path)):
-                    out.append(Path(val))
+                if isinstance(val, Path):
+                    out.append(val)
+                elif isinstance(val, str):
+                    # only treat as path if it looks like one
+                    if os.sep in val or val.startswith(".") or val.startswith("~"):
+                        out.append(Path(val))
+                elif isinstance(val, dict):
+                    for v in val.values():
+                        out.extend(_collect_paths(v))
                 elif isinstance(val, (list, tuple, set)):
                     for v in val:
                         out.extend(_collect_paths(v))
@@ -1501,12 +1617,35 @@ def cache_file(
                     if _force:
                         logger.info("[%s] forced re-execution", fname)
                     else:
-                        # Check if any cache files exist for this function
-                        existing = list(cache_dir_path.glob(f"{fname}.*.{ext}"))
+                        existing = sorted(
+                            cache_dir_path.glob(f"{fname}.*.{ext}"),
+                            key=lambda p: p.stat().st_mtime,
+                        )
                         if not existing:
                             logger.info("[%s] first execution", fname)
                         else:
-                            logger.info("[%s] cache miss (argument or dependency changed)", fname)
+                            stored = _safe_load_full(existing[-1])
+                            if stored is not None:
+                                sm = stored["meta"]
+                                _MISS_LABELS = {
+                                    "call": "arguments",
+                                    "closure": "function body/closure",
+                                    "dir_states": "file/directory contents",
+                                    "envs": "environment variables",
+                                    "version": "version",
+                                    "depends_on_files": "explicit file dependencies",
+                                    "depends_on_vars": "explicit variable dependencies",
+                                    "pkgs": "package versions",
+                                }
+                                changes = [
+                                    label for key, label in _MISS_LABELS.items()
+                                    if sm.get(key) != hashlist.get(key)
+                                ]
+                                if not changes:
+                                    changes = ["unknown (possibly new argument combination)"]
+                                logger.info("[%s] cache miss -- changed: %s", fname, ", ".join(changes))
+                            else:
+                                logger.info("[%s] cache miss (previous entry unreadable)", fname)
 
                 # 2. record pre-execution file hashes for modification warning
                 pre_file_hashes: Dict[str, str] = {}
