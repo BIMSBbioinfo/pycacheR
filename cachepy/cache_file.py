@@ -42,6 +42,55 @@ _cache_tree_graph: Dict[str, Dict[str, Any]] = {}
 # file-state cache for fast_file_hash (R: .file_state_cache)
 _file_state_cache: Dict[str, Dict[str, Any]] = {}
 
+# Sentinel waiting parameters (mirrors cacheR concurrency coordination)
+_SENTINEL_POLL_INTERVAL = 2       # seconds between polls
+_SENTINEL_WAIT_TIMEOUT = 600      # max seconds to wait
+_SENTINEL_STALE_THRESHOLD = 3600  # sentinels older than this (seconds) are ignored
+
+
+# ============================================================================
+# Sentinel waiting (concurrency coordination, mirrors cacheR)
+# ============================================================================
+
+def _wait_for_sentinel(
+    sentinel_path: Path,
+    outfile: Path,
+    load_fn: Callable[[Path], Any],
+    fname: str,
+    poll: float = _SENTINEL_POLL_INTERVAL,
+    timeout: float = _SENTINEL_WAIT_TIMEOUT,
+    stale: float = _SENTINEL_STALE_THRESHOLD,
+) -> Optional[Any]:
+    """If another process is computing (sentinel exists and is fresh),
+    wait for it to finish and return the cached result. Returns None on timeout."""
+    if not sentinel_path.exists():
+        return None
+    try:
+        age = time.time() - sentinel_path.stat().st_mtime
+    except OSError:
+        return None
+    if age >= stale:
+        return None  # stale sentinel, ignore
+
+    waited = 0.0
+    while waited < timeout:
+        time.sleep(poll)
+        waited += poll
+        if outfile.exists():
+            try:
+                result = load_fn(outfile)
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info("[%s] loaded from parallel worker after %.0fs wait", fname, waited)
+                return result
+            except Exception:
+                pass
+        # sentinel removed but no cache file → other process failed, stop waiting
+        if not sentinel_path.exists():
+            break
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("[%s] wait timed out after %ds; executing", fname, int(timeout))
+    return None
+
 
 # ============================================================================
 # Helpers to manage the graph (R: .cacheTree_current_node, .cacheTree_register_node)
@@ -1428,6 +1477,7 @@ def cache_file(
             _cache_tree_call_stack.append(node_id)
             try:
                 # 1. optimistic load
+                sentinel_path = outfile.with_suffix(outfile.suffix + ".computing")
                 if _load and not _force and outfile.exists():
                     try:
                         result = _safe_load(outfile)
@@ -1437,6 +1487,14 @@ def cache_file(
                     except Exception:
                         # partial/corrupt -> ignore and recompute
                         pass
+
+                # 1b. check if another process is already computing
+                if not _force:
+                    waited_result = _wait_for_sentinel(
+                        sentinel_path, outfile, _safe_load, fname
+                    )
+                    if waited_result is not None:
+                        return waited_result
 
                 # verbose: report why we're computing
                 if verbose:
@@ -1456,7 +1514,6 @@ def cache_file(
                     pre_file_hashes = dict(dir_hashes_args)
 
                 # 3. compute with sentinel
-                sentinel_path = outfile.with_suffix(outfile.suffix + ".computing")
                 try:
                     sentinel_path.touch()
                 except OSError:
