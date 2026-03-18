@@ -1,5 +1,5 @@
 
-# cachepy <img src="https://img.shields.io/badge/status-experimental-orange" align="right"/>
+# cachepy <img src="https://img.shields.io/badge/status-experimental-orange" align="right"/> <a href="https://BIMSBbioinfo.github.io/cachepy/"><img src="https://img.shields.io/badge/docs-mkdocs-blue" align="right"/></a>
 
 **cachepy** tracks your data and code so you don't have to
 

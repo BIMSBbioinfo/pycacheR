@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cachepy"
-version = "0.1.0"
+version = "1.0.0"
 description = "Disk-backed memoization decorator with automatic dependency tracking"
 readme = "README.md"
 license = {text = "MIT"}
