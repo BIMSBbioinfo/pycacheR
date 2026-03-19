@@ -187,6 +187,111 @@ def cache_tree_reset() -> None:
     _cache_tree_graph.clear()
 
 
+def cache_tree_files() -> List[str]:
+    """Return a sorted list of all tracked file paths across all graph nodes."""
+    all_files: set = set()
+    for node in _cache_tree_graph.values():
+        for fp in node.get("files", []):
+            all_files.add(str(fp))
+        for fp in node.get("file_hashes", {}):
+            all_files.add(str(fp))
+    return sorted(all_files)
+
+
+def cache_tree_summary() -> str:
+    """Return a human-readable summary of all graph nodes.
+
+    For each node prints: function name, node ID, parents, children,
+    and tracked files.
+    """
+    lines: List[str] = []
+    nodes = dict(_cache_tree_graph)
+    lines.append(f"Cache tree: {len(nodes)} node(s)")
+    lines.append("")
+    for nid, node in nodes.items():
+        fname = node.get("fname", "?")
+        parents = node.get("parents", [])
+        children = node.get("children", [])
+        files = [str(f) for f in node.get("files", [])]
+        fh = node.get("file_hashes", {})
+        # merge file sources
+        all_f = sorted(set(files) | set(fh.keys()))
+
+        lines.append(f"  {fname}")
+        lines.append(f"    id:       {nid}")
+        if parents:
+            lines.append(f"    parents:  {', '.join(parents)}")
+        if children:
+            lines.append(f"    children: {', '.join(children)}")
+        if all_f:
+            lines.append(f"    files:    {', '.join(all_f)}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def cache_tree_to_json(path: Optional[os.PathLike | str] = None) -> str:
+    """Export the cache tree as JSON.
+
+    Returns the JSON string.  If *path* is given, also writes to file.
+    """
+    import json
+
+    nodes = dict(_cache_tree_graph)
+    export: Dict[str, Any] = {"nodes": [], "edges": []}
+    seen_edges: set = set()
+
+    for nid, node in nodes.items():
+        files = [str(f) for f in node.get("files", [])]
+        fh = {str(k): v for k, v in node.get("file_hashes", {}).items()}
+        export["nodes"].append({
+            "id": nid,
+            "fname": node.get("fname"),
+            "outfile": str(node.get("outfile")) if node.get("outfile") else None,
+            "parents": list(node.get("parents", [])),
+            "children": list(node.get("children", [])),
+            "files": files,
+            "file_hashes": fh,
+        })
+        for child in node.get("children", []):
+            edge = (nid, child)
+            if edge not in seen_edges:
+                seen_edges.add(edge)
+                export["edges"].append({"from": nid, "to": child})
+
+    text = json.dumps(export, indent=2)
+    if path is not None:
+        Path(path).write_text(text)
+    return text
+
+
+def cache_tree_to_dot(path: Optional[os.PathLike | str] = None) -> str:
+    """Export the cache tree as Graphviz DOT format.
+
+    Returns the DOT string.  If *path* is given, also writes to file.
+    """
+    nodes = dict(_cache_tree_graph)
+    lines = ["digraph cache_tree {", '  rankdir=TB;', '  node [shape=box, style=filled, fillcolor="#1D3557", fontcolor=white, fontname="sans-serif"];']
+
+    for nid, node in nodes.items():
+        fname = node.get("fname", "?")
+        label = fname.replace('"', '\\"')
+        lines.append(f'  "{nid}" [label="{label}"];')
+
+    seen: set = set()
+    for nid, node in nodes.items():
+        for child in node.get("children", []):
+            edge = (nid, child)
+            if edge not in seen:
+                seen.add(edge)
+                lines.append(f'  "{nid}" -> "{child}";')
+
+    lines.append("}")
+    text = "\n".join(lines)
+    if path is not None:
+        Path(path).write_text(text)
+    return text
+
+
 def cache_tree_save(path: os.PathLike | str) -> Path:
     """Save a serializable representation (named dict of nodes) to disk."""
     path = Path(path)
