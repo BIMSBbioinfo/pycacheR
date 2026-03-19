@@ -1,0 +1,45 @@
+{% set name = "cachepy" %}
+{% set version = "1.0.0" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  # sha256: UPDATE_AFTER_PYPI_UPLOAD
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.9
+    - pip
+    - setuptools >=61.0
+  run:
+    - python >=3.9
+
+test:
+  imports:
+    - cachepy
+  commands:
+    - python -c "from cachepy import cache_file; print('OK')"
+
+about:
+  home: https://github.com/BIMSBbioinfo/cachepy
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: Disk-backed memoization decorator with automatic dependency tracking
+  description: |
+    cachepy is a disk-backed caching decorator for Python that automatically
+    detects changes in code, arguments, and input files. It caches function
+    results to disk as pickle files and tracks the full dependency graph.
+  dev_url: https://github.com/BIMSBbioinfo/cachepy
+  doc_url: https://BIMSBbioinfo.github.io/cachepy/
+
+extra:
+  recipe-maintainers:
+    - frenkiboy

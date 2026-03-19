@@ -7,17 +7,37 @@ name = "cachepy"
 version = "1.0.0"
 description = "Disk-backed memoization decorator with automatic dependency tracking"
 readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.8"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.9"
+authors = [
+    {name = "Vedran Franke", email = "vedran.franke@gmail.com"},
+]
+keywords = ["caching", "memoization", "bioinformatics", "reproducibility", "pipeline"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 docs = ["mkdocs-material", "mkdocstrings[python]"]
+lock = ["filelock"]
 
 [project.urls]
 Homepage = "https://github.com/BIMSBbioinfo/cachepy"
 Documentation = "https://BIMSBbioinfo.github.io/cachepy/"
+Repository = "https://github.com/BIMSBbioinfo/cachepy"
+Issues = "https://github.com/BIMSBbioinfo/cachepy/issues"
 
 [tool.setuptools.packages.find]
 include = ["cachepy*"]
