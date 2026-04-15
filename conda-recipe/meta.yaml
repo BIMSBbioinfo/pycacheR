@@ -1,4 +1,4 @@
-{% set name = "pycacher" %}
+{% set name = "pycacheR" %}
 {% set version = "1.0.0" %}
 
 package:

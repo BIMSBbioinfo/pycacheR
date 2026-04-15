@@ -2,7 +2,7 @@
 
 This tutorial demonstrates how cachepy accelerates a typical scRNA-seq analysis
 using the PBMC 3k dataset from 10x Genomics. It corresponds to the
-[`02_scrnaseq_cachepy.ipynb`](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/02_scrnaseq_cachepy.ipynb) notebook.
+[`02_scrnaseq_cachepy.ipynb`](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/02_scrnaseq_cachepy.ipynb) notebook.
 
 Each analysis step is wrapped with `@cache_file`, so re-running the notebook
 skips expensive computations. This is especially useful when:
@@ -167,4 +167,4 @@ for nid, node in nodes.items():
 ## Speed Benchmark
 
 Cache overhead is constant (~1-10 ms) regardless of computation time.
-See the [full notebook](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/02_scrnaseq_cachepy.ipynb) for benchmark plots.
+See the [full notebook](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/02_scrnaseq_cachepy.ipynb) for benchmark plots.

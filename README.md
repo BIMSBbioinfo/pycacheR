@@ -1,5 +1,5 @@
 
-# pycacher <img src="https://img.shields.io/badge/status-experimental-orange" align="right"/> <a href="https://BIMSBbioinfo.github.io/pycacher/"><img src="https://img.shields.io/badge/docs-mkdocs-blue" align="right"/></a>
+# pycacheR <img src="https://img.shields.io/badge/status-stable-green" align="right"/> <a href="https://BIMSBbioinfo.github.io/pycacheR/"><img src="https://img.shields.io/badge/docs-mkdocs-blue" align="right"/></a>
 
 **cachepy** tracks your data and code so you don't have to
 
@@ -28,10 +28,10 @@ It's like snakemake/nextflow, but on the fly.
 ### Installation
 
 ```bash
-pip install pycacher
+pip install pycacheR
 ```
 
-The PyPI package is called `pycacher`, but the import name is `cachepy`:
+The PyPI package is called `pycacheR`, but the import name is `cachepy`:
 
 ```python
 from cachepy import cache_file

@@ -3,7 +3,7 @@
 cachepy automatically tracks **which cached function called which** and **which files each depends on**. This tutorial covers the full graph API.
 
 !!! tip "Notebook version"
-    This tutorial is also available as a Jupyter notebook: [`notebooks/04_cache_graph.ipynb`](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/04_cache_graph.ipynb)
+    This tutorial is also available as a Jupyter notebook: [`notebooks/04_cache_graph.ipynb`](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/04_cache_graph.ipynb)
 
 ## Building a Pipeline
 
@@ -123,4 +123,4 @@ def integrate(sample):
     return {g: expr[g] for g in muts if g in expr}
 ```
 
-See the [notebook](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/04_cache_graph.ipynb) for the full diamond DAG example with visualisation.
+See the [notebook](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/04_cache_graph.ipynb) for the full diamond DAG example with visualisation.

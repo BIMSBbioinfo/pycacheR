@@ -1,7 +1,7 @@
 # Feature Showcase
 
 This tutorial demonstrates all major cachepy features. It corresponds to the
-[`01_cachepy_showcase.ipynb`](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/01_cachepy_showcase.ipynb) notebook.
+[`01_cachepy_showcase.ipynb`](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/01_cachepy_showcase.ipynb) notebook.
 
 ## Setup
 
@@ -293,4 +293,4 @@ cfg = load_config(config_path)
 ## 16. Speed Benchmark
 
 Cache overhead is constant (~1-3 ms) regardless of original computation time.
-See the [notebook](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/01_cachepy_showcase.ipynb) for the full benchmark with plots.
+See the [notebook](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/01_cachepy_showcase.ipynb) for the full benchmark with plots.

@@ -3,7 +3,7 @@
 This tutorial shows how cachepy accelerates a typical PyTorch workflow by caching
 every expensive step — data loading, training, evaluation, and feature extraction.
 It corresponds to the
-[`03_pytorch_cachepy.ipynb`](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/03_pytorch_cachepy.ipynb) notebook.
+[`03_pytorch_cachepy.ipynb`](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/03_pytorch_cachepy.ipynb) notebook.
 
 We use MNIST for simplicity, but the same pattern applies to any PyTorch pipeline.
 
@@ -168,4 +168,4 @@ features = extract_features(...)          # from cache
 ## Speed Benchmark
 
 Cache overhead is constant and tiny. The bigger the computation, the bigger the speedup.
-See the [full notebook](https://github.com/BIMSBbioinfo/pycacher/blob/main/notebooks/03_pytorch_cachepy.ipynb) for benchmark plots.
+See the [full notebook](https://github.com/BIMSBbioinfo/pycacheR/blob/main/notebooks/03_pytorch_cachepy.ipynb) for benchmark plots.

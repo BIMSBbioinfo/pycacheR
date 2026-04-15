@@ -1,8 +1,8 @@
 site_name: cachepy
 site_url: https://BIMSBbioinfo.github.io/cachepy/
 site_description: Disk-backed memoization decorator with automatic dependency tracking
-repo_url: https://github.com/BIMSBbioinfo/pycacher
-repo_name: BIMSBbioinfo/pycacher
+repo_url: https://github.com/BIMSBbioinfo/pycacheR
+repo_name: BIMSBbioinfo/pycacheR
 
 theme:
   name: material
