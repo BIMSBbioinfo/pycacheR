@@ -28,10 +28,16 @@ It's like snakemake/nextflow, but on the fly.
 ### Installation
 
 ```bash
-pip install pycacheR
+# From GitHub
+pip install git+https://github.com/BIMSBbioinfo/pycacheR.git
 ```
 
-The PyPI package is called `pycacheR`, but the import name is `cachepy`:
+```bash
+# From Guix
+guix install -f https://raw.githubusercontent.com/BIMSBbioinfo/pycacheR/main/guix.scm
+```
+
+The import name is `cachepy`:
 
 ```python
 from cachepy import cache_file
