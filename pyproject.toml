@@ -7,7 +7,7 @@ name = "pycacheR"
 version = "1.0.0"
 description = "Disk-backed memoization decorator with automatic dependency tracking"
 readme = "README.md"
-license = "GPL-3.0-or-later"
+license = {text = "GPL-3.0-or-later"}
 requires-python = ">=3.9"
 authors = [
     {name = "Vedran Franke", email = "vedran.franke@mdc-berlin.de"},
